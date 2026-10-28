@@ -19,7 +19,7 @@ def save_image(image: UploadFile, product_id: int) -> str:
     if extension not in ALLOWED_EXTENSIONS:
         raise HTTPException(
             status_code=400,
-            detail="Only JPG, JPEG, PNG and WEBP images are allowed"
+            detail="Only JPG, JPEG, PNG and WEBP images are allowed",
         )
 
     UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
@@ -31,7 +31,10 @@ def save_image(image: UploadFile, product_id: int) -> str:
             shutil.copyfileobj(image.file, buffer)
     except Exception:
         file_path.unlink(missing_ok=True)
-        raise HTTPException(status_code=500, detail="Image upload failed")
+        raise HTTPException(
+            status_code=500,
+            detail="Image upload failed",
+        )
 
     return f"/img/{filename}"
 
@@ -46,8 +49,14 @@ def remove_image(image_url: str | None) -> None:
         (UPLOAD_DIR / filename).unlink(missing_ok=True)
 
 
-def create_product(db: Session, name: str, price: float, stock: int,
-                   description: str | None, image: UploadFile | None):
+def create_product(
+    db: Session,
+    name: str,
+    price: float,
+    stock: int,
+    description: str | None,
+    image: UploadFile | None,
+):
     image_url = None
 
     try:
@@ -56,7 +65,8 @@ def create_product(db: Session, name: str, price: float, stock: int,
             price=price,
             stock=stock,
             description=description,
-            image_url=None
+            image_url=None,
+            is_deleted=False,
         )
 
         db.add(product)
@@ -82,30 +92,62 @@ def create_product(db: Session, name: str, price: float, stock: int,
 
 
 def get_products(db: Session):
-    return db.query(Product).all()
+    return (
+        db.query(Product)
+        .filter(Product.is_deleted.is_(False))
+        .order_by(Product.id)
+        .all()
+    )
 
 
 def get_product(db: Session, product_id: int):
-    product = db.query(Product).filter(Product.id == product_id).first()
+    product = (
+        db.query(Product)
+        .filter(
+            Product.id == product_id,
+            Product.is_deleted.is_(False),
+        )
+        .first()
+    )
 
     if not product:
-        raise HTTPException(status_code=404, detail="Product not found")
+        raise HTTPException(
+            status_code=404,
+            detail="Product not found",
+        )
 
     return product
 
 
-def update_product(db: Session, product_id: int, name: str | None,
-                   price: float | None, stock: int | None,
-                   description: str | None, image: UploadFile | None):
-    product = get_product(db, product_id)
+def update_product(
+    db: Session,
+    product_id: int,
+    name: str | None,
+    price: float | None,
+    stock: int | None,
+    description: str | None,
+    image: UploadFile | None,
+):
+    try:
+        product = get_product(db, product_id)
+    except Exception:
+        if image:
+            image.file.close()
+        raise
 
     if (
-        name is None and price is None and stock is None
-        and description is None and not (image and image.filename)
+        name is None
+        and price is None
+        and stock is None
+        and description is None
+        and not (image and image.filename)
     ):
         if image:
             image.file.close()
-        raise HTTPException(status_code=400, detail="No fields to update")
+        raise HTTPException(
+            status_code=400,
+            detail="No fields to update",
+        )
 
     old_image = product.image_url
     new_image = None
@@ -148,19 +190,11 @@ def update_product(db: Session, product_id: int, name: str | None,
 
 def delete_product(db: Session, product_id: int):
     product = get_product(db, product_id)
-    old_image = product.image_url
 
-    try:
-        db.delete(product)
-        db.commit()
-    except Exception:
-        db.rollback()
-        raise
+    product.is_deleted = True
+    db.commit()
 
-    if old_image:
-        try:
-            remove_image(old_image)
-        except OSError:
-            pass
-
-    return {"message": "Product deleted successfully", "product_id": product_id}
+    return {
+        "message": "Product deleted successfully",
+        "product_id": product_id,
+    }

@@ -1,4 +1,3 @@
-
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -11,8 +10,14 @@ from fastapi.staticfiles import StaticFiles
 from database import Base, engine
 from models.product_model import Product
 from models.user_model import User
+from models.category_model import Category
+from models.cart_model import CartItem
+
 from routes.product_routes import router as product_router
 from routes.auth_routes import router as auth_router
+from routes.category_routes import router as category_router
+from routes.cart_routes import router as cart_router
+
 
 IMG_DIR = Path(__file__).resolve().parent / "img"
 IMG_DIR.mkdir(parents=True, exist_ok=True)
@@ -29,7 +34,7 @@ app = FastAPI(
     description="FastAPI Backend for E-commerce Product Management with PostgreSQL & Image Uploads",
     version="1.0.0",
     lifespan=lifespan,
-    docs_url=None
+    docs_url=None,
 )
 
 
@@ -45,14 +50,17 @@ def custom_openapi():
     )
 
     schemas = openapi_schema.get("components", {}).get("schemas", {})
-    for _, schema in schemas.items():
+
+    for schema in schemas.values():
         if "properties" in schema:
-            for _, prop in schema["properties"].items():
+            for prop in schema["properties"].values():
                 if "anyOf" in prop:
                     non_null = [
-                        item for item in prop["anyOf"]
+                        item
+                        for item in prop["anyOf"]
                         if item.get("type") != "null"
                     ]
+
                     if len(non_null) == 1:
                         clean = non_null[0]
                         desc = prop.get("description") or clean.get("description")
@@ -79,6 +87,8 @@ app.mount("/img", StaticFiles(directory=str(IMG_DIR)), name="img")
 
 app.include_router(product_router)
 app.include_router(auth_router)
+app.include_router(category_router)
+app.include_router(cart_router)
 
 
 @app.get("/docs", include_in_schema=False)
@@ -88,7 +98,7 @@ async def custom_swagger_ui_html():
         title=f"{app.title} - Interactive API Docs",
         swagger_js_url="https://cdn.jsdelivr.net/npm/swagger-ui-dist@5/swagger-ui-bundle.js",
         swagger_css_url="https://cdn.jsdelivr.net/npm/swagger-ui-dist@5/swagger-ui.css",
-        swagger_favicon_url="https://fastapi.tiangolo.com/img/favicon.png"
+        swagger_favicon_url="https://fastapi.tiangolo.com/img/favicon.png",
     )
 
     custom_enhancements = """
@@ -227,7 +237,7 @@ async def custom_swagger_ui_html():
     "/",
     tags=["General"],
     summary="Root endpoint",
-    description="Check if the API server is running."
+    description="Check if the API server is running.",
 )
 def home():
     return {"message": "E-commerce Backend API is running"}
@@ -237,7 +247,7 @@ def home():
     "/health",
     tags=["General"],
     summary="Health check endpoint",
-    description="Verify API operational status."
+    description="Verify API operational status.",
 )
 def health_check():
     return {"status": "healthy"}
