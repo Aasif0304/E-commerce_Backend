@@ -17,6 +17,12 @@ from routes.product_routes import router as product_router
 from routes.auth_routes import router as auth_router
 from routes.category_routes import router as category_router
 from routes.cart_routes import router as cart_router
+from models.address_model import Address
+from models.order_model import Order
+from models.order_item_model import OrderItem
+from models.address_model import Address
+from routes.address_routes import router as address_router
+from routes.order_routes import router as order_router
 
 
 IMG_DIR = Path(__file__).resolve().parent / "img"
@@ -89,6 +95,8 @@ app.include_router(product_router)
 app.include_router(auth_router)
 app.include_router(category_router)
 app.include_router(cart_router)
+app.include_router(address_router)
+app.include_router(order_router)
 
 
 @app.get("/docs", include_in_schema=False)

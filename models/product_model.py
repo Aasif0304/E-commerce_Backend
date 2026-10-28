@@ -1,7 +1,8 @@
 
-from sqlalchemy import Column, Integer, String, Text, Numeric, Boolean
-from database import Base
+from sqlalchemy import (Column,Integer,String,Text,Numeric,Boolean,ForeignKey,)
+from sqlalchemy.orm import relationship
 
+from database import Base
 
 class Product(Base):
     __tablename__ = "products"
@@ -13,3 +14,12 @@ class Product(Base):
     stock = Column(Integer, default=0, nullable=False)
     image_url = Column(String(500), nullable=True)
     is_deleted = Column(Boolean, default=False, nullable=False)
+
+    category_id = Column(
+        Integer,
+        ForeignKey("categories.id"),
+        nullable=True,
+        index=True,
+    )
+
+    category = relationship("Category")

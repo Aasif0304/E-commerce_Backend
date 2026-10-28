@@ -9,6 +9,11 @@ from alembic import context
 from database import Base, engine
 from models.product_model import Product
 from models.category_model import Category
+from models.user_model import User
+from models.cart_model import CartItem
+from models.address_model import Address
+from models.order_model import Order
+from models.order_item_model import OrderItem
 
 config = context.config
 

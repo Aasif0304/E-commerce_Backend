@@ -11,10 +11,17 @@ def create_product(
     price: float,
     stock: int,
     description: str | None,
-    image: UploadFile | None
+    image: UploadFile | None,
+    category_id: int | None = None,
 ):
     return product_service.create_product(
-        db, name, price, stock, description, image
+        db,
+        name,
+        price,
+        stock,
+        description,
+        image,
+        category_id,
     )
 
 
@@ -33,10 +40,18 @@ def update_product(
     price: float | None,
     stock: int | None,
     description: str | None,
-    image: UploadFile | None
+    image: UploadFile | None,
+    category_id: int | None = None,
 ):
     return product_service.update_product(
-        db, product_id, name, price, stock, description, image
+        db,
+        product_id,
+        name,
+        price,
+        stock,
+        description,
+        image,
+        category_id,
     )
 
 

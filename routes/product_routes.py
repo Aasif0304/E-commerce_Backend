@@ -24,7 +24,7 @@ router = APIRouter(prefix="/products", tags=["Products"])
     response_model=ProductResponse,
     status_code=status.HTTP_201_CREATED,
     summary="Create a product",
-    description="Add a new product with details and optional image upload.",
+    description="Add a new product with details, optional category and image.",
 )
 def create_product(
     name: str = Form(default="", description="Product name"),
@@ -33,6 +33,11 @@ def create_product(
     description: str | None = Form(
         default=None,
         description="Product description",
+    ),
+    category_id: int | None = Form(
+        default=None,
+        ge=1,
+        description="ID of an existing category",
     ),
     image: UploadFile | None = File(
         default=None,
@@ -60,7 +65,13 @@ def create_product(
         )
 
     return product_controller.create_product(
-        db, name.strip(), price, stock, description, image
+        db,
+        name.strip(),
+        price,
+        stock,
+        description,
+        image,
+        category_id,
     )
 
 
@@ -96,7 +107,7 @@ def get_product(
     response_model=ProductResponse,
     summary="Update a product",
     description=(
-        "Update product details and/or replace the product image. "
+        "Update product details, category and/or image. "
         "Omitted fields remain unchanged."
     ),
 )
@@ -121,6 +132,11 @@ def update_product(
     description: str | None = Form(
         default=None,
         description="Product description",
+    ),
+    category_id: int | None = Form(
+        default=None,
+        ge=1,
+        description="New category ID",
     ),
     image: UploadFile | None = File(
         default=None,
@@ -154,7 +170,14 @@ def update_product(
             name = name.strip()
 
         return product_controller.update_product(
-            db, product_id, name, price, stock, description, image
+            db,
+            product_id,
+            name,
+            price,
+            stock,
+            description,
+            image,
+            category_id,
         )
 
     finally:
