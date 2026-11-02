@@ -13,7 +13,6 @@ from models.product_model import Product
 
 def create_order(db: Session, user_id: int, address_id: int):
     try:
-        # Verify that the address belongs to this user and is active.
         address = (
             db.query(Address)
             .filter(
@@ -30,7 +29,6 @@ def create_order(db: Session, user_id: int, address_id: int):
                 detail="Active delivery address not found",
             )
 
-        # Lock this user's cart rows while creating the order.
         cart_items = (
             db.query(CartItem)
             .filter(CartItem.user_id == user_id)
@@ -44,7 +42,6 @@ def create_order(db: Session, user_id: int, address_id: int):
                 detail="Your cart is empty",
             )
 
-        # Validate products and stock before saving the order.
         order_lines = []
         total_amount = Decimal("0.00")
 
@@ -95,7 +92,6 @@ def create_order(db: Session, user_id: int, address_id: int):
                 }
             )
 
-        # Save a snapshot of the delivery address in the order.
         order = Order(
             user_id=user_id,
             address_id=address.id,
@@ -113,7 +109,6 @@ def create_order(db: Session, user_id: int, address_id: int):
         db.add(order)
         db.flush()
 
-        # Save order item snapshots and reduce stock.
         for line in order_lines:
             order_item = OrderItem(
                 order_id=order.id,
@@ -123,11 +118,10 @@ def create_order(db: Session, user_id: int, address_id: int):
                 unit_price=line["unit_price"],
                 subtotal=line["subtotal"],
             )
-            db.add(order_item)
 
+            db.add(order_item)
             line["product"].stock -= line["quantity"]
 
-        # Clear the cart only after order records have been prepared.
         for line in order_lines:
             db.delete(line["cart_item"])
 
@@ -185,6 +179,10 @@ def get_order_details(db: Session, user_id: int, order_id: int):
             detail="Order not found",
         )
 
+    return _build_order_details(db, order)
+
+
+def _build_order_details(db: Session, order: Order):
     order_items = (
         db.query(OrderItem)
         .filter(OrderItem.order_id == order.id)
@@ -220,3 +218,61 @@ def get_order_details(db: Session, user_id: int, order_id: int):
         "status": order.status,
         "created_at": order.created_at,
     }
+
+
+def cancel_order(db: Session, user_id: int, order_id: int):
+    try:
+        order = (
+            db.query(Order)
+            .filter(
+                Order.id == order_id,
+                Order.user_id == user_id,
+            )
+            .with_for_update()
+            .first()
+        )
+
+        if not order:
+            raise HTTPException(
+                status_code=404,
+                detail="Order not found",
+            )
+
+        if order.status not in ["PENDING", "CONFIRMED"]:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Order cannot be cancelled because its status is {order.status}",
+            )
+
+        order_items = (
+            db.query(OrderItem)
+            .filter(OrderItem.order_id == order.id)
+            .all()
+        )
+
+        for item in order_items:
+            product = (
+                db.query(Product)
+                .filter(Product.id == item.product_id)
+                .with_for_update()
+                .first()
+            )
+
+            if not product:
+                raise HTTPException(
+                    status_code=404,
+                    detail=f"Product ID {item.product_id} not found",
+                )
+
+            product.stock += item.quantity
+
+        order.status = "CANCELLED"
+
+        db.commit()
+        db.refresh(order)
+
+        return _build_order_details(db, order)
+
+    except Exception:
+        db.rollback()
+        raise

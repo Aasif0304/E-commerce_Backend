@@ -7,6 +7,7 @@ from models.user_model import User
 from routes.auth_routes import get_current_user
 from controllers import order_controller
 
+
 router = APIRouter(
     prefix="/orders",
     tags=["Order Management"],
@@ -41,6 +42,22 @@ def get_my_orders(
     return order_controller.get_my_orders(
         db,
         current_user.id,
+    )
+
+
+@router.patch(
+    "/{order_id}/cancel",
+    summary="Cancel my order",
+)
+def cancel_order(
+    order_id: int = Path(..., ge=1),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    return order_controller.cancel_order(
+        db,
+        current_user.id,
+        order_id,
     )
 
 

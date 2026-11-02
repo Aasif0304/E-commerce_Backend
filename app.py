@@ -23,7 +23,7 @@ from models.order_item_model import OrderItem
 from models.address_model import Address
 from routes.address_routes import router as address_router
 from routes.order_routes import router as order_router
-
+from routes.admin_routes import router as admin_router
 
 IMG_DIR = Path(__file__).resolve().parent / "img"
 IMG_DIR.mkdir(parents=True, exist_ok=True)
@@ -97,6 +97,7 @@ app.include_router(category_router)
 app.include_router(cart_router)
 app.include_router(address_router)
 app.include_router(order_router)
+app.include_router(admin_router)
 
 
 @app.get("/docs", include_in_schema=False)
