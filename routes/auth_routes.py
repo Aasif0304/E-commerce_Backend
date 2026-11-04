@@ -1,4 +1,3 @@
-
 import os
 from datetime import datetime, timedelta, timezone
 
@@ -7,8 +6,8 @@ from dotenv import load_dotenv
 from fastapi import (
     APIRouter,
     Depends,
-    Form,
     HTTPException,
+    Request,
     Security,
     status,
 )
@@ -78,28 +77,75 @@ def register_user(
     "/login",
     summary="Login user",
     description=(
-        "Login using email and password form fields. "
+        "Login using email and password. "
+        "Supports both JSON request body and form data. "
         "Returns user details, role and access token."
     ),
+    openapi_extra={
+        "requestBody": {
+            "required": True,
+            "content": {
+                "application/json": {
+                    "schema": {
+                        "type": "object",
+                        "properties": {
+                            "email": {"type": "string", "example": "aasif@example.com"},
+                            "password": {"type": "string", "example": "password123"},
+                        },
+                        "required": ["email", "password"],
+                    }
+                },
+                "application/x-www-form-urlencoded": {
+                    "schema": {
+                        "type": "object",
+                        "properties": {
+                            "email": {"type": "string", "example": "aasif@example.com"},
+                            "password": {"type": "string", "example": "password123"},
+                        },
+                        "required": ["email", "password"],
+                    }
+                },
+            },
+        }
+    },
 )
-def login_user(
-    email: str = Form(
-        ...,
-        description="User email address",
-        examples=["aasif@example.com"],
-    ),
-    password: str = Form(
-        ...,
-        description="User password",
-    ),
+async def login_user(
+    request: Request,
     db: Session = Depends(get_db),
 ):
+    email = None
+    password = None
+
+    content_type = request.headers.get("content-type", "")
+    if "application/json" in content_type:
+        try:
+            body = await request.json()
+            if isinstance(body, dict):
+                email = body.get("email") or body.get("username")
+                password = body.get("password")
+        except Exception:
+            pass
+
+    if not email or not password:
+        try:
+            form = await request.form()
+            email = form.get("email") or form.get("username")
+            password = form.get("password")
+        except Exception:
+            pass
+
+    if not email or not password:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Email and password are required",
+        )
+
     user = db.query(User).filter(
-        User.email == email
+        User.email == str(email).strip()
     ).first()
 
     if not user or not password_hash.verify(
-        password,
+        str(password),
         user.hashed_password,
     ):
         raise HTTPException(
@@ -116,6 +162,7 @@ def login_user(
         {
             "sub": str(user.id),
             "email": user.email,
+            "role": user.role,
             "exp": expire,
         },
         SECRET_KEY,

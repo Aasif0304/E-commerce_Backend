@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, Form, HTTPException, Path, status
+from fastapi import APIRouter, Depends, HTTPException, Path, Request, status
 from sqlalchemy.orm import Session
 
 from database import get_db
@@ -17,22 +17,69 @@ router = APIRouter(prefix="/categories", tags=["Categories"])
     response_model=CategoryResponse,
     status_code=status.HTTP_201_CREATED,
     summary="Create a category",
+    openapi_extra={
+        "requestBody": {
+            "required": True,
+            "content": {
+                "application/json": {
+                    "schema": {
+                        "type": "object",
+                        "properties": {
+                            "name": {"type": "string", "example": "Electronics"},
+                            "description": {"type": "string", "example": "Devices and gadgets"},
+                        },
+                        "required": ["name"],
+                    }
+                },
+                "application/x-www-form-urlencoded": {
+                    "schema": {
+                        "type": "object",
+                        "properties": {
+                            "name": {"type": "string", "example": "Electronics"},
+                            "description": {"type": "string", "example": "Devices and gadgets"},
+                        },
+                        "required": ["name"],
+                    }
+                },
+            },
+        }
+    },
 )
-def create_category(
-    name: str = Form(..., min_length=1, max_length=100),
-    description: str | None = Form(default=None),
+async def create_category(
+    request: Request,
     db: Session = Depends(get_db),
     current_user=Depends(require_admin),
 ):
-    if not name.strip():
+    name = None
+    description = None
+
+    content_type = request.headers.get("content-type", "")
+    if "application/json" in content_type:
+        try:
+            body = await request.json()
+            if isinstance(body, dict):
+                name = body.get("name")
+                description = body.get("description")
+        except Exception:
+            pass
+
+    if name is None:
+        try:
+            form = await request.form()
+            name = form.get("name")
+            description = form.get("description")
+        except Exception:
+            pass
+
+    if not name or not str(name).strip():
         raise HTTPException(
-            status_code=400,
+            status_code=status.HTTP_400_BAD_REQUEST,
             detail="Category name cannot be empty",
         )
 
     return category_controller.create_category(
         db,
-        name.strip(),
+        str(name).strip(),
         description,
     )
 
@@ -62,24 +109,69 @@ def get_category(
     "/{category_id}",
     response_model=CategoryResponse,
     summary="Update a category",
+    openapi_extra={
+        "requestBody": {
+            "required": False,
+            "content": {
+                "application/json": {
+                    "schema": {
+                        "type": "object",
+                        "properties": {
+                            "name": {"type": "string", "example": "Updated Category"},
+                            "description": {"type": "string", "example": "Updated description"},
+                        },
+                    }
+                },
+                "application/x-www-form-urlencoded": {
+                    "schema": {
+                        "type": "object",
+                        "properties": {
+                            "name": {"type": "string", "example": "Updated Category"},
+                            "description": {"type": "string", "example": "Updated description"},
+                        },
+                    }
+                },
+            },
+        }
+    },
 )
-def update_category(
+async def update_category(
     category_id: int = Path(..., ge=1),
-    name: str | None = Form(default=None, min_length=1, max_length=100),
-    description: str | None = Form(default=None),
+    request: Request = None,
     db: Session = Depends(get_db),
     current_user=Depends(require_admin),
 ):
-    if name is not None and not name.strip():
+    name = None
+    description = None
+
+    content_type = request.headers.get("content-type", "") if request else ""
+    if "application/json" in content_type:
+        try:
+            body = await request.json()
+            if isinstance(body, dict):
+                name = body.get("name")
+                description = body.get("description")
+        except Exception:
+            pass
+
+    if name is None and description is None and request:
+        try:
+            form = await request.form()
+            name = form.get("name")
+            description = form.get("description")
+        except Exception:
+            pass
+
+    if name is not None and not str(name).strip():
         raise HTTPException(
-            status_code=400,
+            status_code=status.HTTP_400_BAD_REQUEST,
             detail="Category name cannot be empty",
         )
 
     return category_controller.update_category(
         db,
         category_id,
-        name.strip() if name is not None else None,
+        str(name).strip() if name is not None else None,
         description,
     )
 

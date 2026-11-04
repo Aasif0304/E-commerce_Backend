@@ -1,29 +1,34 @@
+import os
+os.environ["DISABLE_SQLALCHEMY_CEXT"] = "1"
+
 from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.docs import get_swagger_ui_html
 from fastapi.openapi.utils import get_openapi
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 
 from database import Base, engine
+
 from models.product_model import Product
 from models.user_model import User
 from models.category_model import Category
 from models.cart_model import CartItem
+from models.address_model import Address
+from models.order_model import Order
+from models.order_item_model import OrderItem
 
 from routes.product_routes import router as product_router
 from routes.auth_routes import router as auth_router
 from routes.category_routes import router as category_router
 from routes.cart_routes import router as cart_router
-from models.address_model import Address
-from models.order_model import Order
-from models.order_item_model import OrderItem
-from models.address_model import Address
 from routes.address_routes import router as address_router
 from routes.order_routes import router as order_router
 from routes.admin_routes import router as admin_router
+
 
 IMG_DIR = Path(__file__).resolve().parent / "img"
 IMG_DIR.mkdir(parents=True, exist_ok=True)
@@ -31,7 +36,12 @@ IMG_DIR.mkdir(parents=True, exist_ok=True)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    Base.metadata.create_all(bind=engine)
+    try:
+        Base.metadata.create_all(bind=engine)
+        print('Database connected and tables verified successfully.')
+    except Exception as e:
+        print(f'Warning: Database connection failed during startup: {e}')
+        print('Hint: Restart PostgreSQL service with: Restart-Service postgresql-x64-17')
     yield
 
 
@@ -41,6 +51,24 @@ app = FastAPI(
     version="1.0.0",
     lifespan=lifespan,
     docs_url=None,
+)
+
+
+# CORS Configuration - Allow Frontend Requests
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+        "http://localhost:5174",
+        "http://127.0.0.1:5174",
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+    ],
+    allow_origin_regex=r"^https?://(localhost|127\.0\.0\.1)(:\d+)?$",
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 
@@ -89,8 +117,11 @@ def custom_openapi():
 
 app.openapi = custom_openapi
 
+
 app.mount("/img", StaticFiles(directory=str(IMG_DIR)), name="img")
 
+
+# Register API Routers
 app.include_router(product_router)
 app.include_router(auth_router)
 app.include_router(category_router)
@@ -181,7 +212,7 @@ async def custom_swagger_ui_html():
             badge.style.borderColor = '#93c5fd';
             badge.style.background = '#eff6ff';
             badge.style.color = '#1d4ed8';
-            badge.innerHTML = '⏳ Loading Product #' + id + ' details...';
+            badge.innerHTML = 'Ã¢ÂÂ³ Loading Product #' + id + ' details...';
 
             try {
               const res = await fetch('/products/' + id);
@@ -190,7 +221,7 @@ async def custom_swagger_ui_html():
                 badge.style.borderColor = '#fca5a5';
                 badge.style.background = '#fef2f2';
                 badge.style.color = '#b91c1c';
-                badge.innerHTML = '⚠️ Product #' + id + ' not found in database.';
+                badge.innerHTML = 'Ã¢Å¡Â Ã¯Â¸Â Product #' + id + ' not found in database.';
                 return;
               }
 
@@ -199,7 +230,7 @@ async def custom_swagger_ui_html():
               badge.style.borderColor = '#86efac';
               badge.style.background = '#f0fdf4';
               badge.style.color = '#15803d';
-              badge.innerHTML = '✅ <b>' + (data.name || 'Product') +
+              badge.innerHTML = 'Ã¢Å“â€¦ <b>' + (data.name || 'Product') +
                 '</b> details loaded! You can now update any fields below and click Execute.';
 
               setFieldValue('name', data.name || '');
@@ -210,7 +241,7 @@ async def custom_swagger_ui_html():
               badge.style.borderColor = '#fca5a5';
               badge.style.background = '#fef2f2';
               badge.style.color = '#b91c1c';
-              badge.innerHTML = '❌ Error loading product: ' + err.message;
+              badge.innerHTML = 'Ã¢ÂÅ’ Error loading product: ' + err.message;
             }
           }
 
@@ -239,6 +270,7 @@ async def custom_swagger_ui_html():
 
     content = swagger_html.body.decode("utf-8")
     content = content.replace("</body>", f"{custom_enhancements}\n</body>")
+
     return HTMLResponse(content)
 
 
