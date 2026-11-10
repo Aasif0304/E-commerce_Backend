@@ -1,3 +1,4 @@
+
 import os
 from datetime import datetime, timedelta, timezone
 
@@ -89,8 +90,14 @@ def register_user(
                     "schema": {
                         "type": "object",
                         "properties": {
-                            "email": {"type": "string", "example": "aasif@example.com"},
-                            "password": {"type": "string", "example": "password123"},
+                            "email": {
+                                "type": "string",
+                                "example": "aasif@example.com",
+                            },
+                            "password": {
+                                "type": "string",
+                                "example": "password123",
+                            },
                         },
                         "required": ["email", "password"],
                     }
@@ -99,8 +106,8 @@ def register_user(
                     "schema": {
                         "type": "object",
                         "properties": {
-                            "email": {"type": "string", "example": "aasif@example.com"},
-                            "password": {"type": "string", "example": "password123"},
+                            "email": {"type": "string"},
+                            "password": {"type": "string"},
                         },
                         "required": ["email", "password"],
                     }
@@ -117,12 +124,15 @@ async def login_user(
     password = None
 
     content_type = request.headers.get("content-type", "")
+
     if "application/json" in content_type:
         try:
             body = await request.json()
+
             if isinstance(body, dict):
                 email = body.get("email") or body.get("username")
                 password = body.get("password")
+
         except Exception:
             pass
 
