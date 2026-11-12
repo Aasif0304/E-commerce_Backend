@@ -1,4 +1,6 @@
 
+from typing import Annotated
+
 from fastapi import (
     APIRouter,
     Depends,
@@ -9,14 +11,31 @@ from fastapi import (
     UploadFile,
     status,
 )
+from pydantic import BeforeValidator
 from sqlalchemy.orm import Session
 
 from database import get_db
 from controllers import product_controller
 from routes.auth_routes import require_admin
 from schemas.product_schema import ProductDeleteResponse, ProductResponse
+from services.product_service import close_upload_files
 
 router = APIRouter(prefix="/products", tags=["Products"])
+
+
+def _strip_empty_uploads(value):
+    """Ignore empty string values sent by forms/Swagger UI for optional file arrays."""
+    if isinstance(value, list):
+        return [item for item in value if not (isinstance(item, str) and item == "")]
+    if isinstance(value, str) and value == "":
+        return []
+    return value
+
+
+OptionalUploadFiles = Annotated[
+    list[UploadFile],
+    BeforeValidator(_strip_empty_uploads),
+]
 
 
 @router.post(
@@ -24,7 +43,7 @@ router = APIRouter(prefix="/products", tags=["Products"])
     response_model=ProductResponse,
     status_code=status.HTTP_201_CREATED,
     summary="Create a product",
-    description="Add a new product with details, optional category and image.",
+    description="Add a new product with details, optional category and multiple images.",
 )
 def create_product(
     name: str = Form(default="", description="Product name"),
@@ -39,40 +58,43 @@ def create_product(
         ge=1,
         description="ID of an existing category",
     ),
-    image: UploadFile | None = File(
+    images: OptionalUploadFiles | None = File(
         default=None,
-        description="Optional image file",
+        description="Optional image files (multiple images supported)",
     ),
     db: Session = Depends(get_db),
     current_user=Depends(require_admin),
 ):
-    if not name or not name.strip():
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Product name is required",
-        )
+    try:
+        if not name or not name.strip():
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Product name is required",
+            )
 
-    if price is None or price <= 0:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Product price must be greater than 0",
-        )
+        if price is None or price <= 0:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Product price must be greater than 0",
+            )
 
-    if stock is None or stock < 0:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Stock must be 0 or greater",
-        )
+        if stock is None or stock < 0:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Stock must be 0 or greater",
+            )
 
-    return product_controller.create_product(
-        db,
-        name.strip(),
-        price,
-        stock,
-        description,
-        image,
-        category_id,
-    )
+        return product_controller.create_product(
+            db,
+            name.strip(),
+            price,
+            stock,
+            description,
+            images,
+            category_id,
+        )
+    finally:
+        close_upload_files(images)
 
 
 @router.get(
@@ -107,7 +129,7 @@ def get_product(
     response_model=ProductResponse,
     summary="Update a product",
     description=(
-        "Update product details, category and/or image. "
+        "Update product details, category and/or images. "
         "Omitted fields remain unchanged."
     ),
 )
@@ -138,9 +160,9 @@ def update_product(
         ge=1,
         description="New category ID",
     ),
-    image: UploadFile | None = File(
+    images: OptionalUploadFiles | None = File(
         default=None,
-        description="New image file",
+        description="New image files (replaces existing images when provided)",
     ),
     db: Session = Depends(get_db),
     current_user=Depends(require_admin),
@@ -176,13 +198,12 @@ def update_product(
             price,
             stock,
             description,
-            image,
+            images,
             category_id,
         )
 
     finally:
-        if image and not image.file.closed:
-            image.file.close()
+        close_upload_files(images)
 
 
 @router.delete(

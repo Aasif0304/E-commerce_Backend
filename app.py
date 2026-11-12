@@ -1,5 +1,6 @@
 import os
 os.environ["DISABLE_SQLALCHEMY_CEXT"] = "1"
+os.environ.setdefault("PSYCOPG_IMPL", "python")
 
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -14,6 +15,7 @@ from fastapi.staticfiles import StaticFiles
 from database import Base, engine
 
 from models.product_model import Product
+from models.product_image_model import ProductImage
 from models.user_model import User
 from models.category_model import Category
 from models.cart_model import CartItem
@@ -72,6 +74,22 @@ app.add_middleware(
 )
 
 
+def _convert_binary_schemas(node):
+    """Convert OpenAPI 3.1 octet-stream fields to format='binary' so Swagger UI renders file pickers."""
+    if isinstance(node, dict):
+        if (
+            node.get("type") == "string"
+            and node.get("contentMediaType") == "application/octet-stream"
+        ):
+            node.pop("contentMediaType", None)
+            node["format"] = "binary"
+        for value in node.values():
+            _convert_binary_schemas(value)
+    elif isinstance(node, list):
+        for item in node:
+            _convert_binary_schemas(item)
+
+
 def custom_openapi():
     if app.openapi_schema:
         return app.openapi_schema
@@ -110,6 +128,8 @@ def custom_openapi():
                             prop["title"] = title
                         if default is not None:
                             prop["default"] = default
+
+    _convert_binary_schemas(openapi_schema)
 
     app.openapi_schema = openapi_schema
     return app.openapi_schema

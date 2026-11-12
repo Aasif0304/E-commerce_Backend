@@ -3,6 +3,7 @@ import os
 from pathlib import Path
 
 os.environ["DISABLE_SQLALCHEMY_CEXT"] = "1"
+os.environ.setdefault("PSYCOPG_IMPL", "python")
 
 from dotenv import load_dotenv
 from sqlalchemy import create_engine

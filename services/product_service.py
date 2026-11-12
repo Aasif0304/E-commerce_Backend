@@ -4,14 +4,42 @@ from pathlib import Path
 from uuid import uuid4
 
 from fastapi import HTTPException, UploadFile
-from sqlalchemy.orm import Session, joinedload
+from sqlalchemy.orm import Session, joinedload, selectinload
 
 from models.product_model import Product
+from models.product_image_model import ProductImage
 from models.category_model import Category
 
 
 UPLOAD_DIR = Path(__file__).resolve().parent.parent / "img"
 ALLOWED_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp"}
+
+
+def filter_valid_images(images: list[UploadFile] | None) -> list[UploadFile]:
+    """Return uploaded image files that have a non-empty filename."""
+    if not images:
+        return []
+    return [img for img in images if img and img.filename and img.filename.strip()]
+
+
+def close_upload_files(images: list[UploadFile] | None) -> None:
+    """Close any open UploadFile streams."""
+    if not images:
+        return
+    for image in images:
+        if image and image.file and not image.file.closed:
+            image.file.close()
+
+
+def validate_image_extensions(images: list[UploadFile]) -> None:
+    """Validate that all uploaded files have allowed image extensions."""
+    for image in images:
+        extension = Path(image.filename or "").suffix.lower()
+        if extension not in ALLOWED_EXTENSIONS:
+            raise HTTPException(
+                status_code=400,
+                detail="Only JPG, JPEG, PNG and WEBP images are allowed",
+            )
 
 
 def save_image(image: UploadFile, product_id: int) -> str:
@@ -39,6 +67,19 @@ def save_image(image: UploadFile, product_id: int) -> str:
     return f"/img/{filename}"
 
 
+def save_images(images: list[UploadFile], product_id: int) -> list[str]:
+    """Validate and save multiple images for a product, rolling back saved files on error."""
+    validate_image_extensions(images)
+    saved_urls: list[str] = []
+    try:
+        for image in images:
+            saved_urls.append(save_image(image, product_id))
+        return saved_urls
+    except Exception:
+        remove_images(saved_urls, ignore_os_error=True)
+        raise
+
+
 def remove_image(image_url: str | None) -> None:
     if not image_url or not image_url.startswith("/img/"):
         return
@@ -46,6 +87,16 @@ def remove_image(image_url: str | None) -> None:
     filename = image_url.removeprefix("/img/")
     if Path(filename).name == filename:
         (UPLOAD_DIR / filename).unlink(missing_ok=True)
+
+
+def remove_images(image_urls: list[str], ignore_os_error: bool = False) -> None:
+    """Delete local image files for the given image URLs."""
+    for image_url in image_urls:
+        try:
+            remove_image(image_url)
+        except OSError:
+            if not ignore_os_error:
+                raise
 
 
 def validate_category(db: Session, category_id: int | None):
@@ -73,12 +124,15 @@ def create_product(
     price: float,
     stock: int,
     description: str | None,
-    image: UploadFile | None,
+    images: list[UploadFile] | None,
     category_id: int | None = None,
 ):
-    image_url = None
+    valid_images = filter_valid_images(images)
+    saved_urls: list[str] = []
     try:
         validate_category(db, category_id)
+        validate_image_extensions(valid_images)
+
         product = Product(
             name=name,
             price=price,
@@ -91,28 +145,27 @@ def create_product(
         db.add(product)
         db.flush()
 
-        if image and image.filename:
-            image_url = save_image(image, product.id)
-            product.image_url = image_url
+        if valid_images:
+            saved_urls = save_images(valid_images, product.id)
+            product.image_url = saved_urls[0]
+            for url in saved_urls:
+                db.add(ProductImage(product_id=product.id, image_url=url))
 
         db.commit()
-        db.refresh(product)
-        db.refresh(product, attribute_names=["category"])
-        return product
+        return get_product(db, product.id)
     except Exception:
         db.rollback()
-        if image_url:
-            remove_image(image_url)
+        if saved_urls:
+            remove_images(saved_urls, ignore_os_error=True)
         raise
     finally:
-        if image:
-            image.file.close()
+        close_upload_files(images)
 
 
 def get_products(db: Session):
     return (
         db.query(Product)
-        .options(joinedload(Product.category))
+        .options(joinedload(Product.category), selectinload(Product.images))
         .filter(Product.is_deleted.is_(False))
         .order_by(Product.id)
         .all()
@@ -122,7 +175,7 @@ def get_products(db: Session):
 def get_product(db: Session, product_id: int):
     product = (
         db.query(Product)
-        .options(joinedload(Product.category))
+        .options(joinedload(Product.category), selectinload(Product.images))
         .filter(
             Product.id == product_id,
             Product.is_deleted.is_(False),
@@ -144,40 +197,37 @@ def update_product(
     price: float | None,
     stock: int | None,
     description: str | None,
-    image: UploadFile | None,
+    images: list[UploadFile] | None,
     category_id: int | None = None,
 ):
+    valid_images = filter_valid_images(images)
     try:
         product = get_product(db, product_id)
-    except Exception:
-        if image:
-            image.file.close()
-        raise
 
-    if (
-        name is None
-        and price is None
-        and stock is None
-        and description is None
-        and category_id is None
-        and not (image and image.filename)
-    ):
-        if image:
-            image.file.close()
-        raise HTTPException(
-            status_code=400,
-            detail="No fields to update",
-        )
+        if (
+            name is None
+            and price is None
+            and stock is None
+            and description is None
+            and category_id is None
+            and not valid_images
+        ):
+            raise HTTPException(
+                status_code=400,
+                detail="No fields to update",
+            )
 
-    try:
         validate_category(db, category_id)
+        validate_image_extensions(valid_images)
     except Exception:
-        if image:
-            image.file.close()
+        close_upload_files(images)
         raise
 
-    old_image = product.image_url
-    new_image = None
+    old_images = [img.image_url for img in product.images]
+    if product.image_url and product.image_url not in old_images:
+        old_images.append(product.image_url)
+
+    new_images: list[str] = []
     try:
         if name is not None:
             product.name = name
@@ -189,26 +239,24 @@ def update_product(
             product.description = description
         if category_id is not None:
             product.category_id = category_id
-        if image and image.filename:
-            new_image = save_image(image, product.id)
-            product.image_url = new_image
+        if valid_images:
+            new_images = save_images(valid_images, product.id)
+            product.images.clear()
+            for url in new_images:
+                product.images.append(ProductImage(image_url=url))
+            product.image_url = new_images[0]
 
         db.commit()
-        db.refresh(product)
     except Exception:
         db.rollback()
-        if new_image:
-            remove_image(new_image)
+        if new_images:
+            remove_images(new_images, ignore_os_error=True)
         raise
     finally:
-        if image:
-            image.file.close()
+        close_upload_files(images)
 
-    if new_image and old_image:
-        try:
-            remove_image(old_image)
-        except OSError:
-            pass
+    if new_images and old_images:
+        remove_images(old_images, ignore_os_error=True)
 
     return get_product(db, product_id)
 

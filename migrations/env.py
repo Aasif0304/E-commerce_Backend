@@ -8,6 +8,7 @@ from alembic import context
 
 from database import Base, engine
 from models.product_model import Product
+from models.product_image_model import ProductImage
 from models.category_model import Category
 from models.user_model import User
 from models.cart_model import CartItem

@@ -23,3 +23,17 @@ class Product(Base):
     )
 
     category = relationship("Category")
+    images = relationship(
+        "ProductImage",
+        back_populates="product",
+        cascade="all, delete-orphan",
+        order_by="ProductImage.id",
+    )
+
+    @property
+    def image_urls(self) -> list[str]:
+        if self.images:
+            return [img.image_url for img in self.images]
+        if self.image_url:
+            return [self.image_url]
+        return []

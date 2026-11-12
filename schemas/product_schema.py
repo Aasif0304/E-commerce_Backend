@@ -28,7 +28,11 @@ class ProductCreate(BaseModel):
     )
     image_url: str | None = Field(
         default=None,
-        description="URL or path of the product image",
+        description="URL or path of the primary product image",
+    )
+    image_urls: list[str] = Field(
+        default_factory=list,
+        description="List of URLs or paths of the product images",
     )
 
 
@@ -60,8 +64,13 @@ class ProductResponse(BaseModel):
     )
     image_url: str | None = Field(
         default=None,
-        description="Image URL of the product",
+        description="Primary image URL of the product",
         examples=["/img/product_1_example.jpg"],
+    )
+    image_urls: list[str] = Field(
+        default_factory=list,
+        description="All image URLs of the product",
+        examples=[["/img/product_1_example1.jpg", "/img/product_1_example2.jpg"]],
     )
     category_id: int | None = Field(
         default=None,

@@ -1,5 +1,5 @@
 from fastapi import HTTPException
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from models.cart_model import CartItem
 from models.product_model import Product
@@ -75,6 +75,7 @@ def get_my_cart(db: Session, user_id: int):
     cart_items = (
         db.query(CartItem, Product)
         .join(Product, CartItem.product_id == Product.id)
+        .options(selectinload(Product.images))
         .filter(
             CartItem.user_id == user_id,
             Product.is_deleted == False,
@@ -98,6 +99,7 @@ def get_my_cart(db: Session, user_id: int):
             "stock": product.stock,
             "subtotal": float(subtotal),
             "image_url": product.image_url,
+            "image_urls": product.image_urls,
         })
 
     return {
