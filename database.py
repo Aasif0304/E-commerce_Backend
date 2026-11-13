@@ -12,19 +12,29 @@ from sqlalchemy.orm import declarative_base, sessionmaker
 BASE_DIR = Path(__file__).resolve().parent
 load_dotenv(BASE_DIR / ".env", override=True)
 
-DB_HOST = os.getenv("DB_HOST", "127.0.0.1")
-DB_PORT = os.getenv("DB_PORT", "5432")
-DB_NAME = os.getenv("DB_NAME", "ecommerce_db")
-DB_USER = os.getenv("DB_USER", "postgres")
-DB_PASSWORD = os.getenv("DB_PASSWORD", "")
+# Check if a unified DATABASE_URL is provided (typical for cloud hosting like Render/Neon/Railway)
+DATABASE_URL = os.getenv("DATABASE_URL")
 
-if not DB_PASSWORD:
-    raise ValueError("DB_PASSWORD missing in .env file")
+if DATABASE_URL:
+    # Normalize postgres:// to postgresql+psycopg:// for SQLAlchemy & psycopg
+    if DATABASE_URL.startswith("postgres://"):
+        DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql+psycopg://", 1)
+    elif DATABASE_URL.startswith("postgresql://") and not DATABASE_URL.startswith("postgresql+psycopg://"):
+        DATABASE_URL = DATABASE_URL.replace("postgresql://", "postgresql+psycopg://", 1)
+else:
+    DB_HOST = os.getenv("DB_HOST", "127.0.0.1")
+    DB_PORT = os.getenv("DB_PORT", "5432")
+    DB_NAME = os.getenv("DB_NAME", "ecommerce_db")
+    DB_USER = os.getenv("DB_USER", "postgres")
+    DB_PASSWORD = os.getenv("DB_PASSWORD", "")
 
-DATABASE_URL = (
-    f"postgresql+psycopg://{DB_USER}:{DB_PASSWORD}"
-    f"@{DB_HOST}:{DB_PORT}/{DB_NAME}?sslmode=disable"
-)
+    if not DB_PASSWORD:
+        raise ValueError("DB_PASSWORD or DATABASE_URL missing in environment/.env file")
+
+    DATABASE_URL = (
+        f"postgresql+psycopg://{DB_USER}:{DB_PASSWORD}"
+        f"@{DB_HOST}:{DB_PORT}/{DB_NAME}?sslmode=disable"
+    )
 
 engine = create_engine(
     DATABASE_URL,
