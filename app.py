@@ -60,23 +60,18 @@ app = FastAPI(
 )
 
 
-# CORS Configuration - Allow Frontend Requests
-allowed_origins_env = os.getenv("ALLOWED_ORIGINS", "")
-custom_origins = [origin.strip() for origin in allowed_origins_env.split(",") if origin.strip()]
-
-default_origins = [
+# Unga Vercel URL & localhost URLs
+origins = [
     "http://localhost:5173",
-    "http://127.0.0.1:5173",
     "http://localhost:5174",
+    "http://127.0.0.1:5173",
     "http://127.0.0.1:5174",
-    "http://localhost:3000",
-    "http://127.0.0.1:3000",
+    "https://ecommerce-admin-red-six.vercel.app",  # <--- UNGA VERCEL ADMIN URL
 ]
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=default_origins + custom_origins,
-    allow_origin_regex=r"^https?://(localhost|127\.0\.0\.1)(:\d+)?$|^https://.*\.vercel\.app$|^https://.*\.netlify\.app$|^https://.*\.onrender\.com$",
+    allow_origins=origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
