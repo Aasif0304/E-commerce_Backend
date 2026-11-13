@@ -41,9 +41,13 @@ async def lifespan(app: FastAPI):
     try:
         Base.metadata.create_all(bind=engine)
         print('Database connected and tables verified successfully.')
+        # Auto-create admin user on startup if not already created
+        from create_admin import make_admin
+        admin_email = os.getenv("ADMIN_EMAIL", "admin@ecommerce.com")
+        admin_password = os.getenv("ADMIN_PASSWORD", "admin123")
+        make_admin(email=admin_email, password=admin_password)
     except Exception as e:
-        print(f'Warning: Database connection failed during startup: {e}')
-        print('Hint: Restart PostgreSQL service with: Restart-Service postgresql-x64-17')
+        print(f'Warning: Database initialization failed: {e}')
     yield
 
 
